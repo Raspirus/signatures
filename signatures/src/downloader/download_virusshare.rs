@@ -25,7 +25,7 @@ pub fn download_all() -> std::io::Result<()> {
 
     let pool = ThreadPool::new(MAX_THREADS)?;
     
-    for file_id in 0..=20 {
+    for file_id in 0..=filecount {
         pool.execute(move || {
             let download_path = output_dir.join(&format!("vs_{:0>5}.md5", file_id));
             let file_url = format!("{URL}{:0>5}.md5", file_id);
@@ -42,7 +42,7 @@ pub fn download_all() -> std::io::Result<()> {
     let mut database = organizer::database::create_pool().expect("Failed to open database connection");
     create_table(&database).expect("Failed to create table");
 
-    for file_id in 0..=20 {
+    for file_id in 0..=filecount {
         let reader_path = output_dir.join(&format!("vs_{:0>5}.md5", file_id));
         info!("Inserting {} into database...", reader_path.display());
         let file = match File::open(&reader_path) {

@@ -14,7 +14,7 @@ static OUTPUT_DIR: &str = "hashes";
 
 fn main() -> std::io::Result<()> {
     pretty_env_logger::init();
-    //downloader::download_virusshare::download_all()?;
+    downloader::download_virusshare::download_all()?;
     downloader::download_virusshare::write_files()?;
     Ok(())
 }

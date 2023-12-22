@@ -1,6 +1,6 @@
-use std::{path::Path, fs};
+use std::{path::Path, fs, thread, time::Duration};
 
-use log::{warn, trace};
+use log::{warn, trace, info, error};
 use reqwest::StatusCode;
 
 use crate::threads::threadpool::ThreadPool;
@@ -13,16 +13,22 @@ pub fn download_all(output_dir: &Path) -> std::io::Result<()> {
     if !output_dir.exists() {
         fs::create_dir_all(output_dir)?;
     }
-
+    /*
     let filecount = match get_file_count() {
         Ok(filecount) => filecount,
         Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Could not get maximum filecount: {err}")))
     };
+    */
 
-    let pool = ThreadPool::new(4)?;
-    for file_id in 0..=filecount {
+    let pool = ThreadPool::new(3)?;
+    for file_id in 0..=5 {
+        let output_path = output_dir.join(&format!("vs_.{:0>5}.md5", file_id));
+        let file_url = format!("{URL}{:0>5}.md5", file_id);
         pool.execute(move || {
-            download_file(Path::new(), file_url)
+            match download_file(Path::new(output_path.as_path(), ), &file_url) {
+                Ok(_) => info!("Downloaded {}", output_path.display()),
+                Err(err) => error!("Failed to download {file_url}: {err}"),
+            };
         });
     }
     Ok(())

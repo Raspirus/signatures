@@ -1,4 +1,4 @@
-use std::{path::Path, fs::{File, self}, io::Write};
+use std::{path::Path, fs::{File, self}, io::Write, time::Duration};
 
 use reqwest::StatusCode;
 
@@ -6,7 +6,11 @@ use reqwest::StatusCode;
 pub fn download_file(output_name: &Path, file_url: &str) -> std::io::Result<()>{
     output_name.exists().then(|| fs::remove_file(output_name));
     let mut file = File::create(output_name)?;
+    println!("waiting");
+    std::thread::sleep(Duration::from_secs(2));
+    /*
     let client = reqwest::blocking::Client::new();
+    
     let response = match client.get(file_url).send() {
         Ok(response) => response,
         Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()))
@@ -19,5 +23,6 @@ pub fn download_file(output_name: &Path, file_url: &str) -> std::io::Result<()>{
         },
         _ => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Got response code {}", response.status())))
     }
+    */
     Ok(())
 }

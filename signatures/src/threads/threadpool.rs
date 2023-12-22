@@ -1,29 +1,38 @@
-use std::{sync::{mpsc, Mutex, Arc}, thread};
+use std::{
+    sync::{mpsc, Arc, Mutex},
+    thread,
+};
 
-use log::{trace, info, debug};
+use log::debug;
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>,
+}
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
-pub struct ThreadPool {
-    _workers: Vec<Worker>,
-    sender: Option<mpsc::Sender<Job>>
-}
-
 impl ThreadPool {
     pub fn new(size: usize) -> Result<ThreadPool, std::io::Error> {
-        if size < 1 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot create threadpool with no threads")) };
+        if size == 0 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot create pool with zero threads")) }
+
         let (sender, receiver) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(receiver));
         let mut workers = Vec::with_capacity(size);
+
         for id in 0..size {
             workers.push(Worker::new(id, Arc::clone(&receiver)));
         }
-        Ok(ThreadPool {_workers: workers, sender: Some(sender)})
+
+        Ok(ThreadPool {
+            workers,
+            sender: Some(sender),
+        })
     }
 
-    pub fn execute<F>(&self, f: F) where F: FnOnce() + Send + 'static {
+    pub fn execute<F>(&self, f: F) where F: FnOnce() + Send + 'static, {
         let job = Box::new(f);
-        self.sender.as_ref().unwrap().send(job).unwrap();
+        self.sender.as_ref().expect("Failed to get sender").send(job).expect("Failed to send job to thread");
     }
 }
 
@@ -31,10 +40,10 @@ impl Drop for ThreadPool {
     fn drop(&mut self) {
         drop(self.sender.take());
 
-        for worker in &mut self._workers {
+        for worker in &mut self.workers {
             debug!("Shutting down worker {}", worker.id);
 
-            if let Some(thread) = worker._thread.take() {
+            if let Some(thread) = worker.thread.take() {
                 thread.join().unwrap();
             }
         }
@@ -43,24 +52,30 @@ impl Drop for ThreadPool {
 
 struct Worker {
     id: usize,
-    _thread: Option<thread::JoinHandle<()>>,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || loop {
-            info!("Waiting");
-            match receiver.lock().unwrap().recv() {
+            // do not move this into the match statement or the threads will not run in parallel for some reason??
+            let message = receiver.lock().unwrap().recv();
+
+            match message {
                 Ok(job) => {
-                    trace!("Worker {id} got job");
+                    debug!("Worker {id} got a job; executing");
                     job();
-                },
+                }
                 Err(_) => {
-                    trace!("Channel closed, worker {id} quitting");
-                    break
-                },
+                    debug!("Worker {id} disconnected; shutting down");
+                    break;
+                }
             }
         });
-        Worker {id, _thread: Some(thread)}
+
+        Worker {
+            id,
+            thread: Some(thread),
+        }
     }
 }

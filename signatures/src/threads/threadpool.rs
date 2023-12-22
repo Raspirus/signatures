@@ -1,36 +1,27 @@
-use std::{
-    sync::{mpsc, Arc, Mutex},
-    thread,
-};
+use std::{sync::{mpsc, Mutex, Arc}, thread};
 
-use log::debug;
-
-pub struct ThreadPool {
-    workers: Vec<Worker>,
-    sender: Option<mpsc::Sender<Job>>,
-}
+use log::{trace, info, debug};
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
+pub struct ThreadPool {
+    _workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>
+}
+
 impl ThreadPool {
     pub fn new(size: usize) -> Result<ThreadPool, std::io::Error> {
-        if size == 0 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot create pool with zero threads")) }
-
+        if size < 1 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot create threadpool with no threads")) };
         let (sender, receiver) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(receiver));
         let mut workers = Vec::with_capacity(size);
-
         for id in 0..size {
             workers.push(Worker::new(id, Arc::clone(&receiver)));
         }
-
-        Ok(ThreadPool {
-            workers,
-            sender: Some(sender),
-        })
+        Ok(ThreadPool {_workers: workers, sender: Some(sender)})
     }
 
-    pub fn execute<F>(&self, f: F) where F: FnOnce() + Send + 'static, {
+    pub fn execute<F>(&self, f: F) where F: FnOnce() + Send + 'static {
         let job = Box::new(f);
         self.sender.as_ref().unwrap().send(job).unwrap();
     }
@@ -40,10 +31,10 @@ impl Drop for ThreadPool {
     fn drop(&mut self) {
         drop(self.sender.take());
 
-        for worker in &mut self.workers {
+        for worker in &mut self._workers {
             debug!("Shutting down worker {}", worker.id);
 
-            if let Some(thread) = worker.thread.take() {
+            if let Some(thread) = worker._thread.take() {
                 thread.join().unwrap();
             }
         }
@@ -52,30 +43,24 @@ impl Drop for ThreadPool {
 
 struct Worker {
     id: usize,
-    thread: Option<thread::JoinHandle<()>>,
+    _thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || loop {
-            let message = receiver.lock().unwrap().recv();
-
-            match message {
+            info!("Waiting");
+            match receiver.lock().unwrap().recv() {
                 Ok(job) => {
-                    debug!("Worker {id} got a job; executing");
-
+                    trace!("Worker {id} got job");
                     job();
-                }
+                },
                 Err(_) => {
-                    debug!("Worker {id} disconnected; shutting down");
-                    break;
-                }
+                    trace!("Channel closed, worker {id} quitting");
+                    break
+                },
             }
         });
-
-        Worker {
-            id,
-            thread: Some(thread),
-        }
+        Worker {id, _thread: Some(thread)}
     }
 }

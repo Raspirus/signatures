@@ -37,7 +37,7 @@ pub fn download_all() -> std::io::Result<()> {
     }
     drop(pool);
     info!("Downloaded files in {}s", std::time::Instant::now().duration_since(start_time).as_secs());
-    fs::remove_dir_all(TMP_DIR)
+    Ok(())
 }
 
 pub fn build_db() -> std::io::Result<()> {

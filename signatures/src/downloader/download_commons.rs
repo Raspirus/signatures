@@ -20,9 +20,9 @@ pub fn download_file(output_name: &Path, file_url: &str, max_retries: usize) -> 
         match response.status() {
             StatusCode::OK => match response.text() {
                 Ok(data) => return Ok(file.write_all(data.as_bytes())?),
-                Err(err) => warn!("Faild to download {file_url} on try {current_retry}: {err}"),
+                Err(err) => warn!("Failed to download {file_url} on try {current_retry}: {err}"),
             },
-            _ => warn!("Faild to download {file_url} on try {current_retry}; Statuscode was {}", response.status())
+            _ => warn!("Failed to download {file_url} on try {current_retry}; Statuscode was {}", response.status())
         }
     }
     Err(std::io::Error::new(std::io::ErrorKind::ConnectionAborted, "Could not download file"))
@@ -103,6 +103,7 @@ pub fn insert_files() -> std::io::Result<()> {
             
             
         }
+        /*
         info!("Inserting {} to {} containing {} hashes into database...", &format!("vs_{:0>5}.md5", start), &format!("vs_{:0>5}.md5", end), lines.len());
         match insert_hashes(&mut database, &lines) {
             Ok(_) => {},
@@ -110,6 +111,7 @@ pub fn insert_files() -> std::io::Result<()> {
                 warn!("Error inserting: {err}");
             }
         }
+        */
     }
     info!("Building database took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
     Ok(())

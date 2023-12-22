@@ -3,7 +3,7 @@ use std::{
     thread,
 };
 
-use log::debug;
+use log::trace;
 
 pub struct ThreadPool {
     workers: Vec<Worker>,
@@ -41,7 +41,7 @@ impl Drop for ThreadPool {
         drop(self.sender.take());
 
         for worker in &mut self.workers {
-            debug!("Shutting down worker {}", worker.id);
+            trace!("Shutting down worker {}", worker.id);
 
             if let Some(thread) = worker.thread.take() {
                 thread.join().unwrap();
@@ -63,11 +63,11 @@ impl Worker {
 
             match message {
                 Ok(job) => {
-                    debug!("Worker {id} got a job; executing");
+                    trace!("Worker {id} got a job; executing");
                     job();
                 }
                 Err(_) => {
-                    debug!("Worker {id} disconnected; shutting down");
+                    trace!("Worker {id} disconnected; shutting down");
                     break;
                 }
             }

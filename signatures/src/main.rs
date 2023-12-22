@@ -10,7 +10,7 @@ static MAX_RETRIES: usize = 5;
 
 static DATABASE: &str = "hashes_db";
 static TABLE_NAME: &str = "hashes";
-static MAX_FILE_COMBINES: usize = 4;
+static MAX_FILE_COMBINES: usize = 8;
 
 static FILE_SIZES: usize = 1_000_000;
 static OUTPUT_DIR: &str = "hashes";
@@ -20,7 +20,7 @@ fn main() -> std::io::Result<()> {
     pretty_env_logger::init();
     downloader::download_virusshare::download_all()?;
     downloader::download_virusshare::build_db()?;
-    downloader::download_virusshare::write_files()?;
+    downloader::download_commons::write_files()?;
     info!("Total time was {}s", std::time::Instant::now().duration_since(start_time).as_secs());
     Ok(())
 }

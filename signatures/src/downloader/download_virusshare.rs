@@ -1,9 +1,9 @@
-use std::{fs::{self, File, DirEntry}, path::Path, io::{BufReader, BufRead, Write}};
+use std::{fs::{self, File, DirEntry}, path::Path, io::{BufReader, BufRead}};
 
 use log::{warn, trace, info, error};
 use reqwest::StatusCode;
 
-use crate::{threads::threadpool::ThreadPool, organizer::{self, database::{create_table, insert_hashes}}, MAX_THREADS, MAX_RETRIES, TMP_DIR, OUTPUT_DIR, FILE_SIZES, MAX_FILE_COMBINES};
+use crate::{threads::threadpool::ThreadPool, organizer::{self, database::{create_table, insert_hashes}}, MAX_THREADS, MAX_RETRIES, TMP_DIR, MAX_FILE_COMBINES};
 
 use super::download_commons::download_file;
 
@@ -136,40 +136,4 @@ fn get_file_count() -> Result<usize, reqwest::Error> {
         }
     }
     Ok(max - 1)
-}
-
-pub fn write_files() -> std::io::Result<()> {
-    let start_time = std::time::Instant::now();
-    let output_dir = Path::new(OUTPUT_DIR);
-    if output_dir.exists() {
-        fs::remove_dir_all(output_dir)?;
-    }
-    fs::create_dir_all(output_dir)?;
-
-    let files: Vec<DirEntry> = fs::read_dir(output_dir)?.filter_map(Result::ok).collect();
-    let mut max = 0;
-    for file in files {
-        let out = file.file_name().to_str().unwrap_or_default().parse::<usize>().unwrap_or_default();
-        if out > max { max = out }
-    }
-    if max > 0 { max += 1 }
-
-    let connection = organizer::database::create_pool().expect("Failed to get connection");
-    let mut current_frame = 0;
-    let mut current_file = max;
-    loop {
-        let bottom = current_frame * FILE_SIZES;
-        let top = bottom + FILE_SIZES;
-        let hashes = organizer::database::get_hashes(&connection, bottom, top).expect("Failed to fetch hashes from db");
-        if hashes.is_empty() { break }
-        let mut file = File::create(Path::new(&format!("{OUTPUT_DIR}/{:0>5}", current_file)))?;
-        info!("Writing to {OUTPUT_DIR}/{:0>5}", current_file);
-        for hash in &hashes {
-            writeln!(file, "{}", hash)?;
-        }
-        current_file += 1;
-        current_frame += 1;
-    }
-    info!("Writing output files took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
-    Ok(())
 }

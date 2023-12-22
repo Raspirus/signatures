@@ -3,7 +3,7 @@ use std::{fs::{self, File, DirEntry}, path::Path, io::{BufReader, BufRead, Write
 use log::{warn, trace, info, error};
 use reqwest::StatusCode;
 
-use crate::{threads::threadpool::ThreadPool, organizer::{self, database::{create_table, insert_hashes}}, MAX_THREADS, MAX_RETRIES, TMP_DIR, OUTPUT_DIR, FILE_SIZES, DATABASE};
+use crate::{threads::threadpool::ThreadPool, organizer::{self, database::{create_table, insert_hashes}}, MAX_THREADS, MAX_RETRIES, TMP_DIR, OUTPUT_DIR, FILE_SIZES, MAX_FILE_COMBINES};
 
 use super::download_commons::download_file;
 
@@ -37,48 +37,59 @@ pub fn download_all() -> std::io::Result<()> {
     }
     drop(pool);
     info!("Downloaded files in {}s", std::time::Instant::now().duration_since(start_time).as_secs());
-    let start_time_db = std::time::Instant::now();
+    fs::remove_dir_all(TMP_DIR)
+}
+
+pub fn build_db() -> std::io::Result<()> {
+    let start_time = std::time::Instant::now();
+    let entries: Vec<DirEntry> = fs::read_dir(Path::new(TMP_DIR))?.filter_map(Result::ok).collect();
+    let output_dir = Path::new(TMP_DIR);
 
     let mut database = organizer::database::create_pool().expect("Failed to open database connection");
     create_table(&database).expect("Failed to create table");
 
-    for file_id in 0..=filecount {
-        let reader_path = output_dir.join(&format!("vs_{:0>5}.md5", file_id));
-        info!("Inserting {} into database...", reader_path.display());
-        let file = match File::open(&reader_path) {
-            Ok(file) => file,
-            Err(err) => {
-                error!("Could not open file {} for reading: {err}", reader_path.display());
-                continue;
-            }
-        };
-        let reader = BufReader::new(file);
-        let mut lines = Vec::new();
+    for chunk_id in 0..=(entries.len() / MAX_FILE_COMBINES) {
+        let start = chunk_id * MAX_FILE_COMBINES;
+        let end = std::cmp::min((chunk_id + 1) * MAX_FILE_COMBINES, entries.len() + 1);
 
-        for line in reader.lines() {
-            match line {
-                Ok(line) => if !line.starts_with('#') { lines.push(line) },
+        let mut lines: Vec<String> = Vec::new();
+        for file_id in start..end {
+            print!("{file_id} ");
+            
+            let reader_path = output_dir.join(&format!("vs_{:0>5}.md5", file_id));
+            let file = match File::open(&reader_path) {
+                Ok(file) => file,
                 Err(err) => {
-                    warn!("Could not read line in file {}: {err}", reader_path.display());
+                    error!("Could not open file {} for reading: {err}", reader_path.display());
                     continue;
-                },
+                }
             };
+            let reader = BufReader::new(file);
+    
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => if !line.starts_with('#') { lines.push(line) },
+                    Err(err) => {
+                        warn!("Could not read line in file {}: {err}", reader_path.display());
+                        continue;
+                    },
+                };
+            }
+    
+            
+            
         }
-
+        info!("Inserting {} to {} containing {} hashes into database...", &format!("vs_{:0>5}.md5", start), &format!("vs_{:0>5}.md5", end), lines.len());
         match insert_hashes(&mut database, &lines) {
-            Ok(_) => trace!("Inserted {} hashes", lines.len()),
+            Ok(_) => {},
             Err(err) => {
                 warn!("Error inserting: {err}");
             }
         }
     }
-
-    info!("Built database in {}s", std::time::Instant::now().duration_since(start_time_db).as_secs());
-    info!("Total time was {}s", std::time::Instant::now().duration_since(start_time).as_secs());
-    fs::remove_dir_all(TMP_DIR)?;
-    fs::remove_file(DATABASE)
+    info!("Building database took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
+    Ok(())
 }
-
 
 
 fn get_file_count() -> Result<usize, reqwest::Error> {
@@ -128,6 +139,7 @@ fn get_file_count() -> Result<usize, reqwest::Error> {
 }
 
 pub fn write_files() -> std::io::Result<()> {
+    let start_time = std::time::Instant::now();
     let output_dir = Path::new(OUTPUT_DIR);
     if output_dir.exists() {
         fs::remove_dir_all(output_dir)?;
@@ -158,5 +170,6 @@ pub fn write_files() -> std::io::Result<()> {
         current_file += 1;
         current_frame += 1;
     }
+    info!("Writing output files took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
     Ok(())
 }

@@ -1,6 +1,6 @@
 use std::{path::Path, fs::{File, self, DirEntry}, io::{Write, BufReader, BufRead}};
 
-use log::{warn, info, error};
+use log::{warn, info, error, debug};
 use reqwest::StatusCode;
 
 use crate::{OUTPUT_DIR, organizer::{self, database::{create_table, insert_hashes}}, FILE_SIZES, TMP_DIR, MAX_FILE_COMBINES};
@@ -75,12 +75,12 @@ pub fn insert_files() -> std::io::Result<()> {
     
     for chunk_id in 0..=(entries.len() / MAX_FILE_COMBINES) {
         let start = chunk_id * MAX_FILE_COMBINES;
-        let end = std::cmp::min((chunk_id + 1) * MAX_FILE_COMBINES, entries.len() + 1);
+        let end = std::cmp::min((chunk_id + 1) * MAX_FILE_COMBINES, entries.len());
 
         let mut lines: Vec<String> = Vec::new();
         for file_id in start..end {
-            
             let reader_path = output_dir.join(entries.get(file_id).expect("Failed to get file from entries").file_name());
+            debug!("Adding {} to batch", reader_path.display());
             let file = match File::open(&reader_path) {
                 Ok(file) => file,
                 Err(err) => {
@@ -89,7 +89,6 @@ pub fn insert_files() -> std::io::Result<()> {
                 }
             };
             let reader = BufReader::new(file);
-    
             for line in reader.lines() {
                 match line {
                     Ok(line) => if !line.starts_with('#') { lines.push(line) },
@@ -98,20 +97,16 @@ pub fn insert_files() -> std::io::Result<()> {
                         continue;
                     },
                 };
-            }
-    
-            
-            
+            }         
         }
-        /*
-        info!("Inserting {} to {} containing {} hashes into database...", &format!("vs_{:0>5}.md5", start), &format!("vs_{:0>5}.md5", end), lines.len());
+        
+        info!("Inserting chunk {}/{} containing {} hashes into database...", chunk_id, (entries.len() / MAX_FILE_COMBINES), lines.len());
         match insert_hashes(&mut database, &lines) {
             Ok(_) => {},
             Err(err) => {
                 warn!("Error inserting: {err}");
             }
         }
-        */
     }
     info!("Building database took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
     Ok(())

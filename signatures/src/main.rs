@@ -13,7 +13,7 @@ static TABLE_NAME: &str = "hashes";
 static MAX_FILE_COMBINES: usize = 8;
 
 static FILE_SIZES: usize = 1_000_000;
-static OUTPUT_DIR: &str = "hashes";
+static OUTPUT_DIR: &str = "../hashes";
 
 fn main() -> std::io::Result<()> {
     let start_time = std::time::Instant::now();

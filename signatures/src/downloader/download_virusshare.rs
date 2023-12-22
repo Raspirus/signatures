@@ -1,7 +1,11 @@
-use std::{path::Path, fs::{self, File}, io::Write};
+use std::{path::Path, fs};
 
 use log::{warn, trace};
 use reqwest::StatusCode;
+
+use crate::threads::threadpool::ThreadPool;
+
+use super::download_commons::download_file;
 
 static URL: &str = "https://virusshare.com/hashfiles/VirusShare_";
 
@@ -15,30 +19,16 @@ pub fn download_all(output_dir: &Path) -> std::io::Result<()> {
         Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Could not get maximum filecount: {err}")))
     };
 
-    println!("max: {filecount}");
-    download_file(Path::new(&format!("{}/ding", output_dir.display())), "https://virusshare.com/hashfiles/VirusShare_00000.md5")?;
-
-    Ok(())
-}
-
-pub fn download_file(output_name: &Path, file_url: &str) -> std::io::Result<()>{
-    output_name.exists().then(|| fs::remove_file(output_name));
-    let mut file = File::create(output_name)?;
-    let client = reqwest::blocking::Client::new();
-    let response = match client.get(file_url).send() {
-        Ok(response) => response,
-        Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()))
-    };
-
-    match response.status() {
-        StatusCode::OK => match response.text() {
-            Ok(data) => file.write_all(data.as_bytes())?,
-            Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string())),
-        },
-        _ => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Got response code {}", response.status())))
+    let pool = ThreadPool::new(4)?;
+    for file_id in 0..=filecount {
+        pool.execute(move || {
+            download_file(Path::new(), file_url)
+        });
     }
     Ok(())
 }
+
+
 
 pub fn get_file_count() -> Result<usize, reqwest::Error> {
     let client = reqwest::blocking::Client::new();

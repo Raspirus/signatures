@@ -1,9 +1,9 @@
-use std::{path::Path, fs::{File, self, DirEntry}, io::Write};
+use std::{path::Path, fs::{File, self, DirEntry}, io::{Write, BufReader, BufRead}};
 
-use log::{warn, info};
+use log::{warn, info, error};
 use reqwest::StatusCode;
 
-use crate::{OUTPUT_DIR, organizer, FILE_SIZES};
+use crate::{OUTPUT_DIR, organizer::{self, database::{create_table, insert_hashes}}, FILE_SIZES, TMP_DIR, MAX_FILE_COMBINES};
 
 /// downloads a file from file_url and save it to output_name. it expects the path to the output name to already exist
 pub fn download_file(output_name: &Path, file_url: &str, max_retries: usize) -> std::io::Result<()>{
@@ -62,5 +62,55 @@ pub fn write_files() -> std::io::Result<()> {
         current_frame += 1;
     }
     info!("Writing output files took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
+    Ok(())
+}
+
+pub fn insert_files() -> std::io::Result<()> {
+    let start_time = std::time::Instant::now();
+    let entries: Vec<DirEntry> = fs::read_dir(Path::new(TMP_DIR))?.filter_map(Result::ok).collect();
+    let output_dir = Path::new(TMP_DIR);
+
+    let mut database = organizer::database::create_pool().expect("Failed to open database connection");
+    create_table(&database).expect("Failed to create table");
+    
+    for chunk_id in 0..=(entries.len() / MAX_FILE_COMBINES) {
+        let start = chunk_id * MAX_FILE_COMBINES;
+        let end = std::cmp::min((chunk_id + 1) * MAX_FILE_COMBINES, entries.len() + 1);
+
+        let mut lines: Vec<String> = Vec::new();
+        for file_id in start..end {
+            
+            let reader_path = output_dir.join(entries.get(file_id).expect("Failed to get file from entries").file_name());
+            let file = match File::open(&reader_path) {
+                Ok(file) => file,
+                Err(err) => {
+                    error!("Could not open file {} for reading: {err}", reader_path.display());
+                    continue;
+                }
+            };
+            let reader = BufReader::new(file);
+    
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => if !line.starts_with('#') { lines.push(line) },
+                    Err(err) => {
+                        warn!("Could not read line in file {}: {err}", reader_path.display());
+                        continue;
+                    },
+                };
+            }
+    
+            
+            
+        }
+        info!("Inserting {} to {} containing {} hashes into database...", &format!("vs_{:0>5}.md5", start), &format!("vs_{:0>5}.md5", end), lines.len());
+        match insert_hashes(&mut database, &lines) {
+            Ok(_) => {},
+            Err(err) => {
+                warn!("Error inserting: {err}");
+            }
+        }
+    }
+    info!("Building database took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
     Ok(())
 }

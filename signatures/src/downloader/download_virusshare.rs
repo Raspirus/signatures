@@ -1,9 +1,9 @@
-use std::{fs::{self, File, DirEntry}, path::Path, io::{BufReader, BufRead}};
+use std::{path::Path, fs};
 
 use log::{warn, trace, info, error};
 use reqwest::StatusCode;
 
-use crate::{threads::threadpool::ThreadPool, organizer::{self, database::{create_table, insert_hashes}}, MAX_THREADS, MAX_RETRIES, TMP_DIR, MAX_FILE_COMBINES};
+use crate::{threads::threadpool::ThreadPool, MAX_THREADS, MAX_RETRIES, TMP_DIR};
 
 use super::download_commons::download_file;
 
@@ -37,57 +37,6 @@ pub fn download_all() -> std::io::Result<()> {
     }
     drop(pool);
     info!("Downloaded files in {}s", std::time::Instant::now().duration_since(start_time).as_secs());
-    Ok(())
-}
-
-pub fn build_db() -> std::io::Result<()> {
-    let start_time = std::time::Instant::now();
-    let entries: Vec<DirEntry> = fs::read_dir(Path::new(TMP_DIR))?.filter_map(Result::ok).collect();
-    let output_dir = Path::new(TMP_DIR);
-
-    let mut database = organizer::database::create_pool().expect("Failed to open database connection");
-    create_table(&database).expect("Failed to create table");
-
-    for chunk_id in 0..=(entries.len() / MAX_FILE_COMBINES) {
-        let start = chunk_id * MAX_FILE_COMBINES;
-        let end = std::cmp::min((chunk_id + 1) * MAX_FILE_COMBINES, entries.len() + 1);
-
-        let mut lines: Vec<String> = Vec::new();
-        for file_id in start..end {
-            print!("{file_id} ");
-            
-            let reader_path = output_dir.join(&format!("vs_{:0>5}.md5", file_id));
-            let file = match File::open(&reader_path) {
-                Ok(file) => file,
-                Err(err) => {
-                    error!("Could not open file {} for reading: {err}", reader_path.display());
-                    continue;
-                }
-            };
-            let reader = BufReader::new(file);
-    
-            for line in reader.lines() {
-                match line {
-                    Ok(line) => if !line.starts_with('#') { lines.push(line) },
-                    Err(err) => {
-                        warn!("Could not read line in file {}: {err}", reader_path.display());
-                        continue;
-                    },
-                };
-            }
-    
-            
-            
-        }
-        info!("Inserting {} to {} containing {} hashes into database...", &format!("vs_{:0>5}.md5", start), &format!("vs_{:0>5}.md5", end), lines.len());
-        match insert_hashes(&mut database, &lines) {
-            Ok(_) => {},
-            Err(err) => {
-                warn!("Error inserting: {err}");
-            }
-        }
-    }
-    info!("Building database took {}s", std::time::Instant::now().duration_since(start_time).as_secs());
     Ok(())
 }
 

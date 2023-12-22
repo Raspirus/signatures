@@ -19,7 +19,7 @@ fn main() -> std::io::Result<()> {
     let start_time = std::time::Instant::now();
     pretty_env_logger::init();
     downloader::download_virusshare::download_all()?;
-    downloader::download_virusshare::build_db()?;
+    downloader::download_commons::insert_files()?;
     downloader::download_commons::write_files()?;
     info!("Total time was {}s", std::time::Instant::now().duration_since(start_time).as_secs());
     Ok(())

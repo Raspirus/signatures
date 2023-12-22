@@ -5,7 +5,7 @@ mod organizer;
 mod threads;
 
 static TMP_DIR: &str = "tmp";
-static MAX_THREADS: usize = 10;
+static MAX_THREADS: usize = 20;
 static MAX_RETRIES: usize = 5;
 
 static DATABASE: &str = "hashes_db";
